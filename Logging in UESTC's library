@@ -274,7 +274,7 @@ class LogInLibrary:
 def main():
     print(help(LogInLibrary))
     print('Start')
-    ys = LogInLibrary('201722080301', 'YAN891512169')
+    ys = LogInLibrary('username','password')
     ys.log_in()
     time.sleep(30)
     print('End')
