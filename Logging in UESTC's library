@@ -1,0 +1,282 @@
+# - * - coding: UTF-8- * -
+from selenium import webdriver
+from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.wait import WebDriverWait
+import tesserocr
+from PIL import Image
+import os
+import time
+from copy import deepcopy
+import cv2
+
+
+class PictureProcessing:
+    def __init__(self, img, path):
+        self._h, self._w = img.shape[:2]
+        self.img = img
+        self.path = path
+
+    # 去除边框
+    def clear_border(self, width=5):
+        for y in range(0, self._w):
+            for x in range(0, self._h):
+                if y < width or y > self._w - width:
+                    self.img[x, y] = 255
+                if x < width or x > self._h - width:
+                    self.img[x, y] = 255
+        #cv2.imwrite(self.path, self.img)
+
+    # 干扰线降噪
+    def interference_line(self):
+    # ！！！opencv矩阵点是反的
+    # img[1,2] 1:图片的高度，2：图片的宽度
+        for y in range(1, self._w - 1):
+            for x in range(1, self._h - 1):
+                count = 0
+                if self.img[x, y - 1] > 245:
+                    count = count + 1
+                if self.img[x, y + 1] > 245:
+                    count = count + 1
+                if self.img[x - 1, y] > 245:
+                    count = count + 1
+                if self.img[x + 1, y] > 245:
+                    count = count + 1
+                if count > 2:
+                    self.img[x, y] = 255
+            #cv2.imwrite(self.path, self.img)
+
+    # 点降噪
+    def interference_point(self):
+        """
+        9邻域框,以当前点为中心的田字框,黑点个数
+        """
+        # todo 判断图片的长宽度下限
+        #cur_pixel = img[x, y] 当前像素点的值
+        for y in range(0, self._w - 1):
+            for x in range(0, self._h - 1):
+                if y == 0:  # 第一行
+                    if x == 0:  # 左上顶点,4邻域
+                    # 中心点旁边3个点
+                        sum = int(self.img[x, y]) \
+                              + int(self.img[x, y + 1]) \
+                              + int(self.img[x + 1, y]) \
+                              + int(self.img[x + 1, y + 1])
+                        if sum <= 2 * 245:
+                            self.img[x, y] = 0
+                    elif x == self._h - 1:  # 右上顶点
+                        sum = int(self.img[x, y]) \
+                              + int(self.img[x, y + 1]) \
+                              + int(self.img[x - 1, y]) \
+                              + int(self.img[x - 1, y + 1])
+                        if sum <= 2 * 245:
+                            self.img[x, y] = 0
+                    else:  # 最上非顶点,6邻域
+                        sum = int(self.img[x - 1, y]) \
+                              + int(self.img[x - 1, y + 1]) \
+                              + int(self.img[x, y]) \
+                              + int(self.img[x, y + 1]) \
+                              + int(self.img[x + 1, y]) \
+                              + int(self.img[x + 1, y + 1])
+                        if sum <= 3 * 245:
+                            self.img[x, y] = 0
+                elif y == self._w - 1:  # 最下面一行
+                    if x == 0:  # 左下顶点
+                    # 中心点旁边3个点
+                        sum = int(self.img[x, y]) \
+                              + int(self.img[x + 1, y]) \
+                              + int(self.img[x + 1, y - 1]) \
+                              + int(self.img[x, y - 1])
+                        if sum <= 2 * 245:
+                            self.img[x, y] = 0
+                    elif x == self._h - 1:  # 右下顶点
+                        sum = int(self.img[x, y]) \
+                              + int(self.img[x, y - 1]) \
+                              + int(self.img[x - 1, y]) \
+                              + int(self.img[x - 1, y - 1])
+                        if sum <= 2 * 245:
+                            self.img[x, y] = 0
+                    else:  # 最下非顶点,6邻域
+                        sum = int(self.img[x, y]) \
+                              + int(self.img[x - 1, y]) \
+                              + int(self.img[x + 1, y]) \
+                              + int(self.img[x, y - 1]) \
+                              + int(self.img[x - 1, y - 1]) \
+                              + int(self.img[x + 1, y - 1])
+                        if sum <= 3 * 245:
+                            self.img[x, y] = 0
+                else:  # y不在边界
+                    if x == 0:  # 左边非顶点
+                        sum = int(self.img[x, y - 1]) \
+                              + int(self.img[x, y]) \
+                              + int(self.img[x, y + 1]) \
+                              + int(self.img[x + 1, y - 1]) \
+                              + int(self.img[x + 1, y]) \
+                              + int(self.img[x + 1, y + 1])
+                        if sum <= 3 * 245:
+                            self.img[x, y] = 0
+                    elif x == self._h - 1:  # 右边非顶点
+                        sum = int(self.img[x, y - 1]) \
+                              + int(self.img[x, y]) \
+                              + int(self.img[x, y + 1]) \
+                              + int(self.img[x - 1, y - 1]) \
+                              + int(self.img[x - 1, y]) \
+                              + int(self.img[x - 1, y + 1])
+                        if sum <= 3 * 245:
+                            self.img[x, y] = 0
+                    else:  # 具备9领域条件的
+                        sum = int(self.img[x - 1, y - 1]) \
+                              + int(self.img[x - 1, y]) \
+                              + int(self.img[x - 1, y + 1]) \
+                              + int(self.img[x, y - 1]) \
+                              + int(self.img[x, y]) \
+                              + int(self.img[x, y + 1]) \
+                              + int(self.img[x + 1, y - 1]) \
+                              + int(self.img[x + 1, y]) \
+                              + int(self.img[x + 1, y + 1])
+                        if sum <= 4 * 245:
+                            self.img[x, y] = 0
+        cv2.imwrite(self.path, self.img)
+        #print('interference_point')
+
+
+class LogInLibrary:
+    '''
+    用于自动登录电子科技大学图书馆
+    '''
+    url = 'http://www.lib.uestc.edu.cn/'  #类属性:使用对象.类属性=值赋值语句，只会给对象添加一个属性，而不会影响到类属性的值
+    def __init__(self, username, password, choice='Chrome'):
+        self.username = username
+        self.password = password
+        self._i = 1
+        try:
+            if str.capitalize(choice) == 'Chrome':
+                self.browser = webdriver.Chrome(
+                    executable_path='C:\Program Files (x86)\Google\Chrome\Application\chromedriver.exe')
+            else:
+                chrome_options = webdriver.ChromeOptions()
+                chrome_options.add_argument('--headless')
+                self.browser = webdriver.Chrome(chrome_options=chrome_options,
+                                executable_path='C:\Program Files (x86)\Google\Chrome\Application\chromedriver.exe')
+        except:
+            print('The unknown error')
+
+    def log_in(self):
+        try:
+            self._wait = WebDriverWait(self.browser, 5)
+            self.browser.get(LogInLibrary.url)
+            self.browser.maximize_window()
+            bt = self._wait.until(
+                EC.element_to_be_clickable((By.CLASS_NAME, 'logon')))
+            bt.click()
+            self.get_verifycode()
+            input_username = self._wait.until(
+                EC.presence_of_element_located((By.NAME, 'username')))
+            print('获得用户名')
+            input_password = self._wait.until(
+                EC.presence_of_element_located((By.NAME, 'password')))
+            print('获得密码')
+            input_verifycode = self._wait.until(
+                EC.presence_of_element_located((By.NAME, 'valicode')))
+            print('获得验证码')
+            submit = self._wait.until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, 'button .cha-vers')))
+            print('获得登录按钮')
+            input_username.clear()
+            input_username.send_keys(self.username)
+            print('已输入用户名')
+            input_password.clear()
+            input_password.send_keys(self.password)
+            print('已输入密码')
+            input_verifycode.send_keys(self.get_verifycode_value())
+            submit.click()
+            print('正在登录')
+            while self.browser.find_element_by_class_name('failmessage'):
+                print('第', self._i, '次尝试失败')
+                input_verifycode.clear()
+                self.get_verifycode()
+                input_verifycode.send_keys(self.get_verifycode_value())
+                time.sleep(1)
+                submit.click()
+                if self._i > 5:
+                    return print('老夫尽力了')
+                print('解析失败该验证码，请重新获取验证码')
+                self._i += 1
+            print('登录成功')
+        except TimeoutException:
+            print('超时错误')
+            self.log_in()
+        except:
+            print('登录失败')
+        finally:
+            '''os.remove('vc.png')
+            os.remove('screenshot.png')
+            os.remove('vc1.png')
+            print('成功删除验证码图片')'''
+
+    def get_verifycode_value(self, threshold=210):
+        try:
+            table = []
+            image = Image.open('vc.png')
+            image1 = deepcopy(image)
+            image1 = image1.convert('L')
+            for i in range(256):
+                if i < threshold:
+                    table.append(0)
+                else:
+                    table.append(1)
+            image1 = image1.point(table, '1')
+            path = 'vc1.png'
+            image1.save(path)
+            image1 = cv2.cvtColor(cv2.imread(path), cv2.COLOR_BGR2GRAY)  #读取灰度图
+            image = PictureProcessing(image1, path)
+            image.clear_border()
+            image.interference_line()
+            image.interference_point()
+            result = tesserocr.image_to_text(Image.open(path))
+            print('验证码：', result)
+            return result
+        except:
+            print('图片解析出错')
+
+    def get_verifycode(self):
+        try:
+            if self._i == 1:
+                self.browser.save_screenshot('screenshot.png')
+                img = self.browser.find_element_by_css_selector('.val-li img')
+                location = img.location
+                size = img.size
+                left = location['x']
+                top = location['y']
+                right = left + size['width']
+                bottom = top + size['height']
+                with Image.open('screenshot.png') as ss:
+                    self._box = (left, top, right, bottom)
+                    self._path = 'vc.png'
+                    ss.crop(self._box).save(self._path)
+                    print('验证码下载成功')
+            else:
+                bt = self._wait.until(
+                        EC.element_to_be_clickable((By.ID, 'valival')))
+                bt.click()
+                time.sleep(3)  #换个方式
+                self.browser.save_screenshot('screenshot.png')
+                time.sleep(3)
+                with Image.open('screenshot.png') as ss:
+                    ss.crop(self._box).save(self._path)
+                    time.sleep(3)
+                    print('验证码重新下载成功')
+        except:
+            print('获取验证码图片失败')
+
+
+def main():
+    print(help(LogInLibrary))
+    print('Start')
+    ys = LogInLibrary('201722080301', 'YAN891512169')
+    ys.log_in()
+    time.sleep(30)
+    print('End')
+if __name__  ==  '__main__':
+    main()
