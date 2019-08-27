@@ -1,0 +1,113 @@
+import requests
+from bs4 import BeautifulSoup
+import matplotlib.pyplot as plt
+import matplotlib
+#import time
+
+
+class NbaPlayer:
+    '''爬取著名NBA球星数据并整理'''
+    url = 'https://zh.wikipedia.org/wiki/NBA最有价值球员'
+    def __init__(self):
+        self.player_url = {}
+        self.num_of_mvp = {}
+        self.positions = {}
+        self.nations = {}
+        self.teams = {}
+        self.l1st = {'num_of_mvp': self.num_of_mvp, 'positions': self.positions, 'nations': self.nations, 'teams': self.teams}
+    '''先获得历届MVP的名单及其对应的球员WIKI'''
+    def scrape_mvps(self):
+        headers = {
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/76.0.3809.100 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3',
+            'accept-language': 'zh-CN,zh;q=0.9'}
+        response = requests.get(self.url, headers=headers)
+        if response.status_code == 200:
+            print('爬取网页成功')
+        else:
+            print('爬取网页失败')
+            return self.scrape_mvps()
+        bs = BeautifulSoup(response.text, 'html.parser')
+        n = bs.find('table', {'class': 'wikitable plainrowheaders sortable'}).find('tbody').find_all('td')
+        l = len(n)
+        for i in range(1, l, 5):
+            name = n[i].a['title']
+            self.player_url[name] = 'https://zh.wikipedia.org' + n[i].a['href']
+            if name in self.num_of_mvp:
+                self.num_of_mvp[name] += 1
+            else:
+                self.num_of_mvp[name] = 1
+        for i in range(2, l, 5):
+            position = n[i].a.text
+            if position in self.positions:
+                self.positions[position] += 1
+            else:
+                self.positions[position] = 1
+        for i in range(3, l, 5):
+            nation = n[i].a.text
+            if nation in self.nations:
+                self.nations[nation] += 1
+            else:
+                self.nations[nation] = 1
+        for i in range(4, l, 5):
+            team = n[i].a.text
+            if team in self.teams:
+                self.teams[team] += 1
+            else:
+                self.teams[team] = 1
+        return
+
+    def analysis_datas(self):
+        with open('NBA MVP.txt', 'w') as f:
+            f.write('球员/国家/球队/位置' + ':' + 'MVP次数' + ',' + 'wiki\n')
+            for l in self.l1st.values():
+                if l == self.num_of_mvp:
+                    items = sorted(l.items(), key=lambda x: x[1], reverse=True)  #用好lambda
+                    for i in items:
+                        f.write(i[0] + ':' + str(i[1]) + ',' + str(self.player_url[i[0]]) + '\n')
+                    f.write('\n')
+                else:
+                    items = sorted(l.items(), key=lambda x: x[1], reverse=True)
+                    for i in items:
+                        f.write(i[0] + ':' + str(i[1]) + '\n')
+                    f.write('\n')
+        return
+
+    def visualization(self, sort=True):
+        zhfont1 = matplotlib.font_manager.FontProperties(fname='E:\Python_Projects/simhei.ttf')  #中文字体
+        for i in self.l1st.values():
+            name_list = []
+            num_list = []
+            if sort == True:
+                xy = sorted(i.items(), key=lambda x: x[1], reverse=True)
+            else:
+                xy = list(i.items())
+            for j in xy:
+                name_list.append(j[0])
+                num_list.append(j[1])
+            rect = plt.barh(range(len(num_list)), num_list, tick_label='')  #bar:垂直柱状图；barh:水平柱状图
+            plt.legend((rect, ), ("MVP", ), prop=zhfont1)
+            for name_num in range(len(name_list)):
+                plt.text(0, name_num, name_list[name_num], rotation=0, fontproperties=zhfont1)
+            #plt.text(5, -2, "球员/国家/球队/位置", fontproperties=zhfont1)
+            plt.xlabel("MVP数量", fontproperties=zhfont1)
+            plt.title("MVP数量对比", fontproperties=zhfont1)
+            plt.show() #显示图片
+            #log = time.strftime("%Y-%m-%d-%H_%M_%S", time.localtime(time.time())) #以当前时间为名保存图片
+            plt.savefig("%s.jpg" % list(self.l1st.keys())[list(self.l1st.values()).index(i)])  #字典：通过value获得key
+        print('绘图完毕')
+        return
+
+
+ys = NbaPlayer()
+ys.scrape_mvps()
+ys.analysis_datas()
+ys.visualization()
+
+
+
+
+
+
+
+
